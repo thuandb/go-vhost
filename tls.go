@@ -66,6 +66,7 @@ var (
 	extensionStatusRequest   uint16 = 5
 	extensionSupportedCurves uint16 = 10
 	extensionSupportedPoints uint16 = 11
+	extensionALPN            uint16 = 16
 	extensionSessionTicket   uint16 = 35
 	extensionNextProtoNeg    uint16 = 13172 // not IANA assigned
 )
@@ -296,6 +297,7 @@ type ClientHelloMsg struct {
 	SupportedPoints    []uint8
 	TicketSupported    bool
 	SessionTicket      []uint8
+	AlpnProtocols      []string
 }
 
 func (m *ClientHelloMsg) unmarshal(data []byte) bool {
@@ -342,6 +344,7 @@ func (m *ClientHelloMsg) unmarshal(data []byte) bool {
 	m.OcspStapling = false
 	m.TicketSupported = false
 	m.SessionTicket = nil
+	m.AlpnProtocols = nil
 
 	if len(data) == 0 {
 		// ClientHello is optionally followed by extension data
@@ -429,6 +432,24 @@ func (m *ClientHelloMsg) unmarshal(data []byte) bool {
 			// http://tools.ietf.org/html/rfc5077#section-3.2
 			m.TicketSupported = true
 			m.SessionTicket = data[:length]
+		case extensionALPN:
+			if length < 2 {
+				return false
+			}
+			l := int(data[0])<<8 | int(data[1])
+			if l != length-2 {
+				return false
+			}
+			d := data[2:length]
+			for len(d) != 0 {
+				stringLen := int(d[0])
+				d = d[1:]
+				if stringLen == 0 || stringLen > len(d) {
+					return false
+				}
+				m.AlpnProtocols = append(m.AlpnProtocols, string(d[:stringLen]))
+				d = d[stringLen:]
+			}
 		}
 		data = data[length:]
 	}
